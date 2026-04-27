@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Mr.Manager
+GenericName=Process Manager
+Comment=System process manager for MrRobotOS
+Exec=mrmanager
+Icon=mrmanager
+Type=Application
+Categories=System;Monitor;
+Keywords=process;manager;system;monitor;cpu;memory;mrrobotos;
