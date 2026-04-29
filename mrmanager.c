@@ -10,6 +10,11 @@
 #include <string.h>
 #include <signal.h>
 #include <gtk/gtk.h>
+#include <gdk/x11/gdkx.h>
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+
 
 #define RUNNING_COUNT  "ps --no-headers -eo stat | grep -c 'R'"
 #define SLEEPING_COUNT "ps --no-headers -eo stat | grep -cE 'S|I'"
@@ -96,6 +101,47 @@ int main(int argc, char **argv)
 	return rc;
 }
 
+static void
+on_window_realize_icon(GtkWidget *widget, gpointer ud)
+{
+	GdkPixbuf *pb = gdk_pixbuf_new_from_file(
+		"/usr/share/icons/mrrobotos/scalable/apps/mrmanager.png", NULL);
+	if (!pb) return;
+
+	int w = gdk_pixbuf_get_width(pb);
+	int h = gdk_pixbuf_get_height(pb);
+	guchar *pixels   = gdk_pixbuf_get_pixels(pb);
+	int     channels = gdk_pixbuf_get_n_channels(pb);
+	int     rowstride= gdk_pixbuf_get_rowstride(pb);
+
+	unsigned long *data = g_malloc((2 + w * h) * sizeof(unsigned long));
+	data[0] = w;
+	data[1] = h;
+	for (int y = 0; y < h; y++) {
+		for (int x = 0; x < w; x++) {
+			guchar *p = pixels + y * rowstride + x * channels;
+			guchar a = channels == 4 ? p[3] : 255;
+			data[2 + y*w + x] = ((unsigned long)a   << 24) |
+			                     ((unsigned long)p[0] << 16) |
+			                     ((unsigned long)p[1] <<  8) |
+			                      (unsigned long)p[2];
+		}
+	}
+
+	GdkSurface *surface  = gtk_native_get_surface(GTK_NATIVE(widget));
+	GdkDisplay *display  = gdk_surface_get_display(surface);
+	Display    *xdisplay = gdk_x11_display_get_xdisplay(display);
+	Window      xwindow  = gdk_x11_surface_get_xid(surface);
+	Atom net_wm_icon = XInternAtom(xdisplay, "_NET_WM_ICON", False);
+	XChangeProperty(xdisplay, xwindow, net_wm_icon,
+		XA_CARDINAL, 32, PropModeReplace,
+		(unsigned char*)data, 2 + w * h);
+	XFlush(xdisplay);
+
+	g_free(data);
+	g_object_unref(pb);
+}
+
 /* ================================================================== */
 static void apply_css(void)
 {
@@ -162,6 +208,7 @@ static void activate(GtkApplication *app, gpointer ud)
 	gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(hbar), TRUE);
 	gtk_header_bar_set_title_widget(GTK_HEADER_BAR(hbar), gtk_label_new("Mr.Manager"));
 	gtk_window_set_titlebar(GTK_WINDOW(g_window), hbar);
+	g_signal_connect(g_window, "realize", G_CALLBACK(on_window_realize_icon), NULL);
 
 	GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 	gtk_window_set_child(GTK_WINDOW(g_window), vbox);
